@@ -1,0 +1,1944 @@
+//
+//  ViewController.swift
+//  xdapp
+//
+//  Created by Isaac Tan on 5/4/24.
+//
+
+import UIKit
+import CoreLocation
+import MapKit
+class Manage: UIViewController, UITextFieldDelegate{
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        userService.fetchData(url_string: "\(link)userInfo.php")
+    }
+    @objc func handle_key_board_dismiss(){
+        self.view.endEditing(true)
+    }
+    @objc func handle_key_board_dismiss_1(sender : UIButton) {
+        self.view.endEditing(true)
+    }
+    
+    func M_feedback() {
+        let generator = UIImpactFeedbackGenerator(style: .medium)
+        generator.impactOccurred()
+    }
+    
+    
+}
+
+typealias data_pass = () -> (Void)
+
+class HomeView: Manage, UITableViewDataSource, UITableViewDelegate, CLLocationManagerDelegate, update_post_protocol{
+    func textFieldDidChangeSelection(_ textField: UITextField) {
+        M_feedback()
+    }
+    // MARK: 1.16 -v
+    func handle_update_post_delegate(x: String) {
+        cur_array = []
+        service.fetchData(url_string: "\(link)zoom_read.php")
+        DispatchQueue.main.asyncAfter(deadline: DispatchTime.now() + 1) {
+            self.table.reloadData()
+        }
+        print("protocol called,  \(x)")
+    }
+    
+    
+    //Variables
+    var menuButtons: [UIButton] = []
+    var indexOfFilteredChoices: [Int] = []
+    var resultsCounter: Int = 0
+    var searchOpened = false
+    var noRes: Bool = false
+    var locationManager: CLLocationManager!
+    var refresh: UIRefreshControl!
+    
+    // MARK: 1.17 word animation
+    var isSearchButtonClicked = false
+    
+    // MARK: 1.12 cache
+    var profileImageCache = NSCache<NSString, UIImage>()
+    
+    
+    @objc func handle_refresh(){
+        
+        if searchOpened{
+            searching(sender: activaterBt)
+        }
+        if isSidebarVisible{
+            toggleSidebar()
+        }
+        self.searchBar.isEnabled = false
+        self.openSearch.isEnabled = false
+        self.sideBarButton.isEnabled = false
+        DispatchQueue.main.asyncAfter(deadline: DispatchTime.now() + 0.45){
+            cur_array.removeAll()
+            self.indexOfFilteredChoices.removeAll()
+            self.resultsCounter = 0
+            self.dispRes.text = "Results:"
+            self.searchBar.text = ""
+            self.noRes = false
+            self.table.reloadData()
+            service.fetchData(url_string: "\(link)zoom_read.php")
+            self.table.isUserInteractionEnabled = false
+        }
+        
+        DispatchQueue.main.asyncAfter(deadline: DispatchTime.now() + 3){
+            self.table.reloadData()
+            self.table.isUserInteractionEnabled = true
+            self.searchBar.isEnabled = true
+            self.openSearch.isEnabled = true
+            self.sideBarButton.isEnabled = true
+            self.refresh?.endRefreshing()
+        }
+        
+    }
+    
+    //Tool
+    lazy var pageCover: TypingEffectLabel = {
+        let tx = TypingEffectLabel()
+         tx.numberOfLines = 0
+         tx.backgroundColor = .white.withAlphaComponent(0.8)
+         tx.frame = view.bounds
+         tx.text = "Please Wait"
+         tx.textColor = .black.withAlphaComponent(0.8)
+         tx.alpha = 1
+         tx.textAlignment = .center
+         tx.font = UIFont(name: "\(main_font_string)", size: 25)
+         
+         let xdlb = TypingEffectLabel()
+         xdlb.text = "\(app_name)  |  Portal"
+        
+         xdlb.font = UIFont(name: "\(main_font_string)", size: 30)
+         xdlb.textAlignment = .center
+         xdlb.numberOfLines = 0
+         xdlb.textColor = .black.withAlphaComponent(0.8)
+         xdlb.backgroundColor = .white
+        
+         xdlb.frame = CGRect(x: 20, y: 150, width: view.frame.width-40, height: 200)
+         DispatchQueue.main.asyncAfter(deadline: DispatchTime.now() + 1) {
+//             styleLabel(label: xdlb, fullText: xdlb.text!, prefix: 1, FSize: 30, SSize: 24, FColor: UIColor.systemBlue, SColor: UIColor.black)
+            xdlb.startTypingEffect(with: slogen_val, typingSpeed: speed_type)
+         }
+         tx.addSubview(xdlb)
+         return tx
+    }()
+    
+    //Page Header Elements
+    lazy var sideBarButton: UIButton = {
+       let bt = UIButton()
+        bt.frame = CGRect(x: 10, y: top.frame.maxY - 40, width: 36, height: 36)
+        bt.backgroundColor = .black
+        bt.setImage(UIImage(systemName: "line.horizontal.3"), for: .normal)
+        bt.tintColor = .white
+        bt.clipsToBounds = true
+        bt.layer.cornerRadius = 5
+        bt.addTarget(self, action: #selector(toggleSidebar), for: .touchUpInside)
+        return bt
+    }()
+    lazy var top: UIView = {
+       lazy var vw = UIView()
+        vw.frame = CGRect(x: 0, y: 0, width: view.frame.width, height: 90)
+        vw.backgroundColor = .white
+        vw.clipsToBounds = false
+        vw.layer.shadowColor = UIColor.gray.cgColor
+        vw.layer.shadowOffset = main_shadow_offset
+        vw.layer.shadowRadius = 2
+        vw.layer.shadowOpacity = 1
+        
+        //buttons
+        let create = UIButton()
+        create.frame = CGRect(x: view.frame.width - 42, y: 50, width: 36, height: 36)
+        create.setTitle("+", for: .normal)
+        create.backgroundColor = top_button_bgColor
+        create.clipsToBounds = true
+        create.layer.cornerRadius = 5
+        create.titleLabel?.font = UIFont(name: "\(main_font_string)", size: 30)
+        create.setTitleColor(top_button_text_color, for: .normal)
+        create.addTarget(self, action: #selector(goToPage(sender: )), for: .touchUpInside)
+        create.tag = 1
+        vw.addSubview(create)
+        return vw
+    }()
+    lazy var nameDisp: UILabel = {
+        let tx = UILabel()
+        tx.textAlignment = .left
+        tx.font = UIFont(name: "\(main_font_string)", size: 18)
+        tx.frame = CGRect(x: 15, y: 60, width: 90, height: 40)
+        tx.backgroundColor = UIColor.white.withAlphaComponent(0.1)
+        tx.layer.borderColor = UIColor.clear.cgColor
+        tx.textColor = .black
+        tx.numberOfLines = 2
+        tx.textAlignment = .center
+        tx.adjustsFontSizeToFitWidth = true
+        return tx
+    }()
+ 
+    
+    
+    lazy var openSearch: UIButton = {
+       let bt = UIButton()
+        bt.frame = CGRect(x: view.center.x - 35, y: 60, width: 70, height: 20)
+        bt.layer.cornerRadius = 8
+        bt.backgroundColor = .white
+        bt.setTitle("Search", for: .normal)
+        bt.setTitleColor(.black, for: .normal)
+        bt.titleLabel?.textAlignment = .center
+        bt.titleLabel?.font = UIFont(name: "\(main_font_string)", size: 15)
+        bt.titleLabel?.adjustsFontSizeToFitWidth = true
+        bt.addTarget(self, action: #selector(searching(sender: )), for: .touchUpInside)
+        return bt
+    }()
+    
+    
+    //input elements
+    lazy var searchLabel: TypingEffectLabel = {
+        let tx = TypingEffectLabel()
+        tx.frame = CGRect(x: 10, y: 15, width: view.frame.maxX - searchClear.frame.width, height: 20)
+        tx.font = UIFont(name: "\(main_font_string)", size: 14)
+        tx.text = search_label_initial_val
+        tx.backgroundColor = UIColor.white.withAlphaComponent(0.1)
+        tx.textColor = .black
+       return tx
+    }()
+    lazy var searchClear: UIButton = {
+       let bt = UIButton()
+        bt.frame = CGRect(x: view.frame.width - 74 - 10, y: 10, width: 74, height: 28)
+        bt.backgroundColor = .black
+        bt.layer.cornerRadius = 5
+        bt.setTitle("Clear", for: .normal)
+        bt.titleLabel?.font = UIFont(name: "\(main_font_string)", size: 14)
+        bt.titleLabel?.textColor = .white
+        bt.titleLabel?.textAlignment = .center
+        bt.addTarget(self, action: #selector(clearResults(sender: )), for: .touchUpInside)
+        return bt
+    }()
+    lazy var searchSpacer: UIView = {
+    let search = UIView()   //spacer
+    search.frame = CGRect(x: 10, y: searchLabel.frame.maxY + 5, width: view.frame.width - 20, height: 30)
+    search.backgroundColor = .white
+    search.layer.borderColor = UIColor.lightGray.withAlphaComponent(0.7).cgColor
+    search.layer.borderWidth = 1
+    return search
+    }()
+    lazy var searchBar: UITextField = {
+        var bar = UITextField()
+        bar.frame = CGRect(x: 10, y: 0, width: searchSpacer.frame.width - 5, height: 30)
+        bar.placeholder = "Search"
+        bar.backgroundColor = .white
+        bar.textColor = .black
+        //tv.borderStyle = .line
+        bar.font = UIFont(name: "\(main_font_string)", size: 18)
+        bar.autocapitalizationType = .none
+        bar.autocorrectionType = .no
+        bar.returnKeyType = .search
+        bar.delegate = self
+        let bt = UIButton()
+        bar.addDoneButton(title: "  Clear  ", target: self, selector: #selector(clearResults(sender: )), dismiss_selector: #selector(handle_key_board_dismiss_1(sender :)))
+        return bar
+    }()
+    // MARK: 1.17
+    func textFieldShouldReturn(_ textField: UITextField) -> Bool {
+        if textField == searchBar {
+            let bt = UIButton()
+            searchResults(sender: bt)
+            textField.resignFirstResponder()
+            return true
+        }
+        return false
+    }
+    lazy var searchSubmit: UIButton = {
+       let bt = UIButton()
+        bt.frame = CGRect(x: 10, y: searchSpacer.frame.maxY + 5, width: 1, height: 30)
+        bt.backgroundColor = .black
+        bt.layer.cornerRadius = 5
+        bt.setTitle("", for: .normal)
+        bt.titleLabel?.font = UIFont(name: "\(main_font_string)", size: 14)
+        bt.titleLabel?.textColor = .white
+        bt.titleLabel?.textAlignment = .center
+        bt.addTarget(self, action: #selector(searchResults(sender: )), for: .touchUpInside)
+        return bt
+    }()
+   
+    lazy var searchField: UIView = {
+       let vw = UIView()
+        vw.frame = CGRect(x: 0/*view.frame.width*/, y: openSearch.frame.minY/*top.frame.maxY*/, width: view.frame.width, height: 110)
+        vw.backgroundColor = .white
+        vw.layer.shadowColor = UIColor.gray.cgColor
+        vw.layer.shadowOffset = main_shadow_offset
+        vw.layer.shadowRadius = 5
+        vw.layer.shadowOpacity = 1
+        return vw
+    }()
+    lazy var dispRes: TypingEffectLabel = {
+       let tx = TypingEffectLabel()
+        tx.frame = CGRect(x: searchSubmit.frame.maxX + 5, y: searchSpacer.frame.maxY + 10, width: view.frame.width - 140, height: 20)
+        tx.text = "Results:"
+        tx.font = UIFont(name: "\(main_font_string)", size: 14)
+        tx.textColor = .black
+        tx.backgroundColor = .white
+        return tx
+    }()
+    
+    
+    //table
+    lazy var table : UITableView = {
+       let tb = UITableView()
+        tb.delegate = self
+        tb.dataSource = self
+        tb.separatorStyle = .none
+        tb.register(CustomizedDataCell.self, forCellReuseIdentifier: "cell")
+        tb.backgroundColor = .white
+        tb.isPagingEnabled = true
+        tb.allowsSelection = true
+        tb.showsVerticalScrollIndicator = false
+        tb.showsHorizontalScrollIndicator = false
+        tb.clipsToBounds = true
+        tb.layer.cornerRadius = curveRadius
+        tb.contentInset = UIEdgeInsets(top: 10, left: 0, bottom: 90, right: 0) //new
+        return tb
+    }()
+    func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
+        
+        if noRes{
+            return 0
+        }
+        else if indexOfFilteredChoices.count == 0{
+            return min(cur_array.count,20)
+        }
+        else{
+            return indexOfFilteredChoices.count
+        }
+
+    }
+    
+    func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
+        
+        let cell = table.dequeueReusableCell(withIdentifier: "cell", for: indexPath) as! CustomizedDataCell
+        
+        
+        cell.clipsToBounds = true
+        cell.layer.cornerRadius = curveRadius
+        
+        cell.backgroundColor = .white
+        cell.selectionStyle = .none
+        cell.contentView.backgroundColor = .clear
+        cell.baseView.backgroundColor = .white
+        cell.baseView.layer.cornerRadius = 10
+        cell.baseView.layer.shadowColor = UIColor.lightGray.cgColor
+        cell.baseView.layer.shadowOffset = main_shadow_offset
+        cell.baseView.layer.shadowRadius = 3
+        cell.baseView.layer.shadowOpacity = 1
+
+        var index = indexPath.row
+        if indexOfFilteredChoices.count != 0{
+            index = indexOfFilteredChoices[indexPath.row]
+        }
+        
+        // MARK: -v updated
+//        if let url = URL(string: "\(link)Users/\(cur_array[index].host_id!)/ProfileImage/image.jpg") {
+//            cell.piv.downloaded(from: url, contentMode: .scaleAspectFill)
+//            print("\(link)Users/\(cur_array[index].host_id!)/ProfileImage/image.jpg")
+//        }else{
+//            cell.piv.image = UIImage(systemName: "person")
+//        }
+        cell.piv.isHidden = true
+        cell.titleLabel.text = "\(cur_array[index].title!)"
+        cell.contentView.addSubview(cell.seperate_line_move)
+        cell.seperate_line_move.frame = CGRect(x: 32, y: 48, width: 0, height: 4)
+        
+//        UIView.animate(withDuration: 1) {
+//            cell.seperate_line_move.frame.size.width = Double(cell.titleLabel.text!.count * 9)
+//        }
+        
+        
+        cell.hostLabel.text = "Creator : \(cur_array[index].host_id!)"
+        
+        // MARK: -v 8.23
+        for item in UserArray {
+            if item.Email == cur_array[index].host_id! && item.Username != nil {
+                if let username = item.Username {
+                    DispatchQueue.main.async {
+                        UIView.animate(withDuration: 0.5) {
+                            cell.hostLabel.text = "Creator : \(username)"
+                        }
+                    }
+                }
+               
+            }
+        }
+
+        var modified_subject : String = ""
+        
+        if cur_array[index].subject?.count != 0 {
+            let array_subject = Array(cur_array[index].subject! as String)
+            
+            for i in 0..<array_subject.count {
+                if array_subject[i] == "," {
+                    continue
+                }
+                if array_subject[i] == " " {
+                    modified_subject.append(" | ")
+                }
+                modified_subject.append(array_subject[i])
+            }
+        }else{
+            cur_array[index].subject = " | "
+        }
+        
+        cell.subjectLabel.text = "\(modified_subject)"
+        cell.descLabel.text = "Description : \(cur_array[index].description!)"
+        for i in 0 ..< UserArray.count{
+            if UserArray[i].Email! == cur_array[index].host_id! && UserArray[i].Public == "0"{
+                cell.hostLabel.text = "Hosted By (Anonymous)"
+            }
+        }
+        
+        cell.dateLabel.text = "Created : \(cur_array[index].post_date!)"
+        var testDate = cur_array[index].scheduleDate
+        if testDate == nil || testDate == "" || testDate == " "{
+            testDate = "None"
+        }
+        cell.sDate.text = "\(testDate!)"
+        cell.sDate.adjustsFontSizeToFitWidth = true
+       
+        cell.subjectLabel.startTypingEffect(with: cell.subjectLabel.text!)
+        
+        // MARK: modification
+        let fsize : Double = 48
+        var fColor : UIColor = UIColor.systemBlue
+        if ((cell.titleLabel.text?.lowercased().contains("algorithm"))! || (cell.titleLabel.text?.lowercased().contains("cs"))! || (cell.titleLabel.text?.lowercased().contains("usaco"))! || (cell.titleLabel.text?.lowercased().contains("leetcode"))! ) {
+            fColor = UIColor.systemGreen
+            cell.configure_index(index: 5)
+            
+        }
+        else if ((cell.titleLabel.text?.lowercased().contains("business"))! || (cell.titleLabel.text?.lowercased().contains("marketing"))! || (cell.titleLabel.text?.lowercased().contains("entre"))! || (cell.titleLabel.text?.lowercased().contains("app"))!) {
+            fColor = UIColor.systemBlue
+            cell.configure_index(index: 4)
+
+        }
+        else if ((cell.titleLabel.text?.lowercased().contains("math"))! || (cell.titleLabel.text?.lowercased().contains("statistics"))! ) {
+            fColor = UIColor.systemGray
+            cell.configure_index(index: 6)
+
+        }else{
+            cell.configure_index(index: 0)
+        }
+        styleLabel(label: cell.titleLabel, fullText: cell.titleLabel.text!, prefix: 1, FSize: fsize, SSize: 36, FColor: fColor, SColor: UIColor.black)
+        
+//        styleLabel(label: cell.hostLabel, fullText: cell.hostLabel.text!, prefix: 1, FSize: fsize, SSize: 15, FColor: UIColor.systemBlue, SColor: UIColor.black)
+//        styleLabel(label: cell.subjectLabel, fullText: cell.subjectLabel.text!, prefix: 1, FSize: fsize, SSize: 15, FColor: UIColor.systemBlue, SColor: UIColor.black)
+//        styleLabel(label: cell.sDate, fullText: cell.sDate.text!, prefix: 1, FSize: fsize, SSize: 15, FColor: UIColor.systemBlue, SColor: UIColor.black)
+        
+        
+        let arr = [cell.titleLabel, cell.descLabel, cell.hostLabel, cell.subjectLabel, cell.sDate, cell.dateLabel]
+        for item in arr {
+            item.backgroundColor = .clear
+        }
+        
+//        cell.configure(text_val:cell.subjectLabel.text!)
+
+        return cell
+    }
+        
+    func tableView(_ tableView: UITableView, heightForRowAt indexPath: IndexPath) -> CGFloat {
+        return table.frame.height
+    }
+
+    func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
+        M_feedback()
+        if isSidebarVisible{
+            toggleSidebar()
+        }
+        UIView.animate(withDuration: 0.2, animations: {
+            tableView.cellForRow(at: indexPath)?.transform = CGAffineTransform(scaleX: 0.95, y: 0.8)
+        }) { _ in
+            UIView.animate(withDuration: 0.2) {
+                tableView.cellForRow(at: indexPath)?.transform = CGAffineTransform.identity
+            }
+        }
+        DispatchQueue.main.asyncAfter(deadline: DispatchTime.now() + 0.4) {
+            if self.indexOfFilteredChoices.count == 0 {
+                self.joinButton(val: indexPath.row)
+            }
+            else{
+                self.joinButton(val: self.indexOfFilteredChoices[indexPath.row])
+            }
+        }
+    }
+    
+   /* func scrollViewDidScrollToTop(_ scrollView: UIScrollView) {
+        if scrollView == table{
+            top.removeFromSuperview()
+        }
+    }
+    func scrollViewDidScroll(_ scrollView: UIScrollView) {
+        if scrollView == table{
+            top.removeFromSuperview()
+        }
+    }*/
+
+    
+    
+    
+    
+    
+    
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        view.backgroundColor = .white
+        print(loggedIn)
+        view.addSubview(pageCover)
+        let tap = UITapGestureRecognizer(target: self, action: #selector(handle_key_board_dismiss))
+        searchField.addGestureRecognizer(tap)
+        locationManager = CLLocationManager()
+        locationManager.delegate = self
+        
+        locationManager.requestWhenInUseAuthorization()
+        locationManager.startUpdatingLocation()
+        service.fetchData(url_string: "\(link)zoom_read.php")
+        userService.fetchData(url_string: "\(link)userInfo.php")
+        currentUser = UserDefaults.standard.string(forKey: "User") ?? "Guest"
+        currentEmail = UserDefaults.standard.string(forKey: "Email") ?? ""
+        DispatchQueue.main.asyncAfter(deadline: DispatchTime.now() + 3) {
+            [weak self] in
+            self?.setup()
+            self?.setupCollectionView()
+            self?.startAutoScroll()
+        }
+        refresh = UIRefreshControl()
+        table.refreshControl = refresh
+        refresh.addTarget(self, action: #selector(handle_refresh), for: .valueChanged)
+        self.pageCover.startTypingEffect(with: "Welcome to", typingSpeed: speed_type)
+
+        
+    }
+    
+    func setup(){
+        indexOfFilteredChoices.removeAll()
+        started = true
+        //setup table
+        self.view.addSubview(self.table)
+        self.table.alpha = 0
+        let table_height = view.frame.height - top.frame.maxY - top.frame.height - 5
+        self.table.frame = CGRect(x: 0, y: top.frame.maxY, width: view.frame.width, height: table_height * 0.75)
+        cell_height = self.table.frame.height
+        //setup header
+        self.view.addSubview(self.top)
+        self.view.addSubview(self.openSearch)
+        self.view.addSubview(self.sideBarButton)
+        
+        
+        self.top.alpha = 0
+        self.openSearch.alpha = 0
+        self.sideBarButton.alpha = 0
+        self.setupSidebar()
+        self.menuButtons[0].isEnabled = false
+        self.menuButtons[1].isEnabled = false
+        self.menuButtons[2].isEnabled = false
+        self.menuButtons[3].isEnabled = false
+        self.menuButtons[4].isEnabled = false
+        self.menuButtons[5].isEnabled = false
+        
+        
+        
+        
+        UIView.animate(withDuration: 0.7) {
+            self.pageCover.alpha = 0
+            self.table.alpha = 1
+            self.top.alpha = 1
+            self.openSearch.alpha = 1
+            self.menuButtons[3].alpha = 1
+            //self.nameDisp.alpha = 1
+            self.sideBarButton.alpha = 1
+        }
+        DispatchQueue.main.asyncAfter(deadline: DispatchTime.now() + 0.71) {
+            self.pageCover.removeFromSuperview()
+        }
+        if loggedIn{
+           menuButtons[3].setTitle("Log Out", for: .normal)
+            nameDisp.text = " Hello, \(currentUser) "
+            var find_User = -1
+            for i in 0..<UserArray.count{
+                if UserArray[i].Email == UserDefaults.standard.string(forKey: "Email"){
+                    find_User = i
+                    break
+                }
+            }
+           
+            if find_User >= 0 && allowLoc{
+                if UserArray[find_User].allowLoc == nil{
+                    allowLoc = false
+                }
+                else if UserArray[find_User].allowLoc == "true"{
+                    allowLoc = true
+                }
+                else{
+                    allowLoc = false
+                }
+                
+                if latitude == nil{
+                    latitude = "0"
+                }
+                if longitude == nil{
+                    longitude = "0"
+                }
+                userService.UpdateLocFunc(email: UserArray[find_User].Email!, UserLat: latitude!, UserLong: longitude!){ err in}
+            }
+            
+        }
+        else{
+            nameDisp.text = " Hello, Guest"
+            menuButtons[2].backgroundColor = .lightGray
+        }
+        
+        if UserDefaults.standard.string(forKey: "image") == "" && !loggedIn && UserDefaults.standard.string(forKey: "image") == nil{
+            profileImagePic.image = UIImage(systemName: "person.circle")
+            self.menuButtons[5].setImage(profileImagePic.image, for: .normal)
+            self.menuButtons[5].clipsToBounds = true
+            
+        }
+        else{
+            if let url = URL(string: UserDefaults.standard.string(forKey: "image") ?? "") {
+                let imageURLString = UserDefaults.standard.string(forKey: "image") ?? ""
+                if let cachedImage = profileImageCache.object(forKey: imageURLString as NSString) {
+                    profileImagePic.image = cachedImage
+                } else {
+                    // Download the image
+                    if let url = URL(string: imageURLString) {
+                        let task = URLSession.shared.dataTask(with: url) { data, response, error in
+                            guard let data = data, error == nil, let image = UIImage(data: data) else {
+                                return
+                            }
+
+                            // Cache the image
+                            self.profileImageCache.setObject(image, forKey: imageURLString as NSString)
+
+                            // Ensure the cell is still visible and update the image on the main thread
+                            DispatchQueue.main.async {
+                                profileImagePic.image = image
+                                self.menuButtons[5].setImage(profileImagePic.image, for: .normal)
+                                self.menuButtons[5].clipsToBounds = true
+
+                            }
+                        }
+                        task.resume()
+                    }
+                }
+                // MARK: old version code
+//                profileImagePic.downloaded(from: url, contentMode: .scaleAspectFill)
+                DispatchQueue.main.asyncAfter(deadline: DispatchTime.now() + 3){
+                    self.menuButtons[5].setImage(profileImagePic.image, for: .normal)
+                    self.menuButtons[5].clipsToBounds = true
+                    self.menuButtons[0].isEnabled = true
+                    self.menuButtons[1].isEnabled = true
+                    self.menuButtons[2].isEnabled = true
+                    self.menuButtons[3].isEnabled = true
+                    self.menuButtons[4].isEnabled = true
+                    self.menuButtons[5].isEnabled = true
+                    
+                }
+            }
+            else{
+                profileImagePic.image = UIImage(systemName: "person.circle")
+                menuButtons[5].setImage(profileImagePic.image, for: .normal)
+                menuButtons[5].clipsToBounds = true
+                self.menuButtons[0].isEnabled = true
+                self.menuButtons[1].isEnabled = true
+                self.menuButtons[2].isEnabled = true
+                self.menuButtons[3].isEnabled = true
+                self.menuButtons[4].isEnabled = true
+                self.menuButtons[5].isEnabled = true
+
+            }
+        
+        }
+        
+    }
+   
+    
+    //Button handlers
+    
+    func joinButton(val: Int){
+        let vc = joinVC()
+        let nav = UINavigationController(rootViewController: vc)
+        nav.modalPresentationStyle = .fullScreen
+        nav.setNavigationBarHidden(true, animated: false)
+        vc.index = val
+        self.present(nav, animated: true)
+    }
+    
+    @objc func loginHandler(sender: UIButton){
+        M_feedback()
+        sender.setTitleColor(.gray.withAlphaComponent(0.8), for: .normal)
+        DispatchQueue.main.asyncAfter(deadline: DispatchTime.now() + 0.2) {
+            sender.setTitleColor(.black, for: .normal)
+        }
+        if !loggedIn{
+            sender.isEnabled = false
+            let vc = LoginVC()
+            let nav = UINavigationController(rootViewController: vc)
+            nav.modalPresentationStyle = .fullScreen
+            nav.setNavigationBarHidden(true, animated: false)
+            self.view.addSubview(self.pageCover)
+            UIView.animate(withDuration: 0.3) {
+                self.pageCover.alpha = 1
+            }
+            userService.fetchData(url_string: "\(link)userInfo.php")
+            vc.completion = {
+                userService.fetchData(url_string: "\(link)userInfo.php")
+                UIView.animate(withDuration: 3) {
+                    self.pageCover.alpha = 0
+                }
+                DispatchQueue.main.asyncAfter(deadline: DispatchTime.now() + 3.1) {
+                    self.table.reloadData()
+                    self.pageCover.removeFromSuperview()
+                    sender.isEnabled = true
+                }
+                if loggedIn{
+                    self.nameDisp.text = " Hello, \(currentUser) "
+                    sender.setTitle("Log Out", for: .normal)
+                    profileImagePic.image = UIImage(systemName: "person.circle")
+                    for i in 0 ..< UserArray.count{
+                        if UserArray[i].Email != nil && UserArray[i].Email! == currentEmail{
+                            if let url = URL(string: "\(link)\(UserArray[i].PfI ?? " ")") {
+                                profileImagePic.downloaded(from: url, contentMode: .scaleAspectFill)
+                                break
+                            }
+                        }
+                    }
+                    DispatchQueue.main.asyncAfter(deadline: DispatchTime.now() + 3) {
+                        self.menuButtons[5].setImage(profileImagePic.image, for: .normal)
+                        self.menuButtons[5].clipsToBounds = true
+                    }
+                    
+                    self.menuButtons[2].backgroundColor = .white
+                   
+                    
+                }
+                
+                
+            }
+            DispatchQueue.main.asyncAfter(deadline: DispatchTime.now() + 0.3) {
+                self.present(nav, animated: true)
+            }
+            
+        }
+        else{
+            let alert = UIAlertController(title: "About to log out", message: "Sure?", preferredStyle: .alert)
+            let ac1 = UIAlertAction(title: "Yes", style: .default) { _ in
+                self.view.addSubview(self.pageCover)
+                
+                UIView.animate(withDuration: 0.1) {
+                    self.pageCover.alpha = 1
+                }
+                UIView.animate(withDuration: 0.3) {
+                    self.pageCover.alpha = 0
+                }
+                DispatchQueue.main.asyncAfter(deadline: DispatchTime.now() + 0.6) {
+                    self.pageCover.removeFromSuperview()
+                }
+                sender.setTitle("Log In", for: .normal)
+                self.nameDisp.text = " Hello, Guest "
+                currentUser = ""
+                currentEmail = ""
+                self.menuButtons[2].backgroundColor = .lightGray
+                loggedIn = false
+                LocalStorage.logout()
+                self.menuButtons[5].setImage(UIImage(systemName: "person.circle"), for: .normal)
+            }
+            
+            let ac2 = UIAlertAction(title: "No", style: .cancel)
+            alert.addAction(ac1)
+            alert.addAction(ac2)
+            self.present(alert, animated: true)
+        }
+        if isSidebarVisible{
+            toggleSidebar()
+        }
+    }
+    
+    @objc func goToPage(sender: UIButton){
+        if isSidebarVisible{
+            toggleSidebar()
+        }
+        self.collectionView.reloadData()
+        self.resetProgressTimer()
+        
+        if sender.tag == 0{
+            UIView.animate(withDuration: 0.2, animations: {
+                sender.transform = CGAffineTransform(scaleX: 0.95, y: 0.8)
+            }) { _ in
+                UIView.animate(withDuration: 0.2) {
+                    sender.transform = CGAffineTransform.identity
+                }
+            }
+            if !noRes{
+                let index = IndexPath(row: 0, section: 0)
+                table.scrollToRow(at: index , at: UITableView.ScrollPosition.top, animated: true)
+            }
+            indexOfFilteredChoices.removeAll()
+            resultsCounter = 0
+            dispRes.text = "Results:"
+            searchBar.text = ""
+            noRes = false
+            DispatchQueue.main.asyncAfter(deadline: DispatchTime.now() + 0.2) {
+                self.table.reloadData()
+            }
+            
+
+        }
+        else{
+            if !noRes {
+                M_feedback()
+                sender.setTitleColor(top_button_bgColor, for: .normal)
+                DispatchQueue.main.asyncAfter(deadline: DispatchTime.now() + 0.2) {
+                    sender.setTitleColor(top_button_text_color, for: .normal)
+                }
+                let vc = CreateVC()
+                let nav = UINavigationController(rootViewController: vc)
+                nav.setNavigationBarHidden(true, animated: false)
+                nav.modalPresentationStyle = .fullScreen
+                
+                // MARK: 1.13 v
+                if currentUser != "Guest" {
+                    vc.completion = {
+                        self.indexOfFilteredChoices.removeAll()
+                        service.fetchData(url_string: "\(link)zoom_read.php")
+                        self.view.addSubview(self.pageCover)
+                        self.pageCover.alpha = 1
+                        UIView.animate(withDuration: 3) {
+                            self.pageCover.alpha = 0
+                        }
+                        DispatchQueue.main.asyncAfter(deadline: DispatchTime.now() + 3.1) {
+                            self.pageCover.removeFromSuperview()
+                            self.table.reloadData()
+                        }
+                        
+                    }
+                    self.present(nav, animated: true)
+                }else{
+                    // MARK: 1.13 v
+                    var title_val = "Guest could only join meeting portal"
+                    var message_val = "Please log in to create portal"
+                    
+                    let title = NSAttributedString(string: title_val, attributes: [
+                        NSAttributedString.Key.font :  UIFont(name: "\(main_font_string)", size: 18)!,
+                        NSAttributedString.Key.foregroundColor : UIColor.black
+                    ])
+
+                    let message = NSAttributedString(string: message_val, attributes: [
+                        NSAttributedString.Key.font : UIFont(name: "\(main_font_string)", size: 14)!,
+                        NSAttributedString.Key.foregroundColor : UIColor.black
+                    ])
+
+                    let alert = UIAlertController(title: "", message: "", preferredStyle: .alert)
+
+                    alert.setValue(title, forKey: "attributedTitle")
+                    alert.setValue(message, forKey: "attributedMessage")
+                    alert.view.tintColor = alert_tint_color
+                    
+                    let exitPage = UIAlertAction(title: "Log In", style: .default){_ in
+                        self.loginHandler(sender: self.menuButtons[3])
+                    }
+                    let CancelExit = UIAlertAction(title: "Cancel", style: .cancel)
+                    
+                    alert.addAction(CancelExit)
+                    alert.addAction(exitPage)
+                    
+                    self.present(alert, animated: true)
+                    
+                }
+                
+            }
+            
+        }
+    }
+    @objc func searching(sender: UIButton){
+        // MARK: 1.17
+        if isSearchButtonClicked == false {
+            searchLabel.startTypingEffect(with: search_label_initial_val, typingSpeed: 0.05)
+            isSearchButtonClicked = true
+        }
+
+        M_feedback()
+        UIView.animate(withDuration: 0.2, animations: {
+            sender.transform = CGAffineTransform(scaleX: 0.95, y: 0.8)
+        }) { _ in
+            UIView.animate(withDuration: 0.2) {
+                sender.transform = CGAffineTransform.identity
+            }
+        }
+        openSearch.isEnabled = false
+        if !searchOpened{
+            view.addSubview(searchField)
+            searchField.alpha = 0
+            searchField.addSubview(searchClear)
+            searchField.addSubview(searchLabel)
+            searchField.addSubview(searchSpacer)
+            searchSpacer.addSubview(searchBar)
+            searchField.addSubview(searchSubmit)
+            searchField.addSubview(dispRes)
+            openSearch.backgroundColor = UIColor(red: 205/255, green: 205/255, blue: 205/255, alpha: 1)
+            UIView.animate(withDuration: 0.3) {
+                self.top.frame.size.height += 100
+                self.searchField.alpha = 1
+                self.searchField.frame.origin.y = self.openSearch.frame.maxY + 5
+                self.table.frame.origin.y += 100
+                self.table.frame.size.height -= 100
+            }
+            if isSidebarVisible{
+                toggleSidebar()
+            }
+        }
+        else{
+            openSearch.backgroundColor = .white
+            UIView.animate(withDuration: 0.3) {
+                self.top.frame.size.height -= 100
+                self.searchField.alpha = 0
+                self.searchField.frame.origin.y = self.openSearch.frame.minY
+                self.table.frame.origin.y -= 100
+                self.table.frame.size.height += 100
+            }
+            DispatchQueue.main.asyncAfter(deadline: DispatchTime.now() + 0.4) {
+                self.searchField.removeFromSuperview()
+                self.searchLabel.removeFromSuperview()
+                self.searchSpacer.removeFromSuperview()
+                self.searchBar.removeFromSuperview()
+                self.searchSubmit.removeFromSuperview()
+                self.searchClear.removeFromSuperview()
+                self.dispRes.removeFromSuperview()
+            }
+        }
+        DispatchQueue.main.asyncAfter(deadline: DispatchTime.now() + 0.8) {
+            self.openSearch.isEnabled = true
+            self.view.bringSubviewToFront(self.openSearch)
+        }
+        searchOpened = !searchOpened
+    }
+    @objc func clearResults(sender: UIButton){
+        M_feedback()
+        noRes = false
+        searchBar.text = ""
+        searchClear.damping()
+        //sender.isEnabled = false
+        indexOfFilteredChoices.removeAll()
+        resultsCounter = 0
+        dispRes.text = "Results:"
+        table.reloadData()
+        searchClear.isEnabled = true
+        
+    }
+    @objc func searchResults(sender: UIButton){
+        // MARK: 1.17
+        if isSearchButtonClicked == false {
+            searchLabel.startTypingEffect(with: search_label_initial_val, typingSpeed: 0.05)
+            isSearchButtonClicked = true
+        }
+        
+        noRes = false
+        resultsCounter = 0
+        indexOfFilteredChoices.removeAll()
+        UIView.animate(withDuration: 0.2, animations: { [self] in
+            searchSubmit.transform = CGAffineTransform(scaleX: 0.95, y: 0.8)
+        }) { _ in
+            UIView.animate(withDuration: 0.2) { [self] in
+                searchSubmit.transform = CGAffineTransform.identity
+            }
+        }
+        searchSubmit.setTitle("Loading...", for: .normal)
+        searchSubmit.isEnabled = false
+        if searchBar.text == "" || searchBar.text == " "{
+            indexOfFilteredChoices.removeAll()
+            resultsCounter = 0
+            dispRes.text = "Results:"
+        }
+        else{
+            let user_search_obj = UserService()
+            print(UserDefaults.standard.string(forKey: "Email")!)
+            user_search_obj.insertSearchContent(sender_id: UserDefaults.standard.string(forKey: "Email")!, search_content: searchBar.text!) { err in
+                print(err)
+                print("search inserted")
+            }
+            for i in 0..<cur_array.count{
+                if cur_array[i].title!.lowercased().contains(searchBar.text!.lowercased()){
+                    indexOfFilteredChoices.append(i)
+                    resultsCounter += 1
+                }
+            }
+            if resultsCounter == 0{
+                let result_txt =  "Results: no results found"
+                dispRes.startTypingEffect(with: result_txt, typingSpeed: 0.05)
+                noRes = true
+            }
+            else{
+                let result_txt = "Results: \(resultsCounter) found"
+                dispRes.startTypingEffect(with: result_txt, typingSpeed: 0.05)
+
+            }
+            
+        }
+        DispatchQueue.main.asyncAfter(deadline: DispatchTime.now() + 0.4) { [self] in
+            searchSubmit.setTitle("Submit", for: .normal)
+            searchSubmit.isEnabled = true
+            self.table.reloadData()
+        }
+        
+    }
+    @objc func openSettings(sender: UIButton){
+        if loggedIn{
+            sender.setTitleColor(.gray.withAlphaComponent(0.8), for: .normal)
+            DispatchQueue.main.asyncAfter(deadline: DispatchTime.now() + 0.2) {
+                sender.setTitleColor(.black, for: .normal)
+            }
+            let vc = AccountVC()
+            let nav = UINavigationController(rootViewController: vc)
+            nav.setNavigationBarHidden(false, animated: false)
+            nav.modalPresentationStyle = .fullScreen
+            vc.completion = {
+                userService.fetchData(url_string: "\(link)userInfo.php")
+                service.fetchData(url_string: "\(link)zoom_read.php")
+                self.view.addSubview(self.pageCover)
+                self.pageCover.alpha = 1
+                UIView.animate(withDuration: 3) {
+                 self.pageCover.alpha = 0
+                }
+               
+                DispatchQueue.main.asyncAfter(deadline: DispatchTime.now() + 3.1) {
+                 self.pageCover.removeFromSuperview()
+                self.table.reloadData()
+                }
+                
+                if !loggedIn{
+                    self.nameDisp.text = " Hello, Guest"
+                    self.menuButtons[3].setTitle("Log In", for: .normal)
+                    self.menuButtons[2].backgroundColor = .lightGray
+                    self.menuButtons[5].setImage(UIImage(systemName: "person.circle"), for: .normal)
+                    self.menuButtons[5].clipsToBounds = true
+                }
+                else{
+                    if allowLoc{
+                        userService.UpdateLocFunc(email: currentEmail, UserLat: latitude!, UserLong: longitude!){ err in}
+                    }
+                    else{
+                        userService.UpdateLocFunc(email: currentEmail, UserLat: "0", UserLong: "0"){ err in}
+                    }
+                    self.nameDisp.text = " Hello, \(currentUser)"
+                    self.menuButtons[5].setImage(profileImagePic.image, for: .normal)
+                    self.menuButtons[5].clipsToBounds = true
+                    //update profile picture
+                }
+                
+            }
+            self.present(nav, animated: true)
+        }
+        else{
+            let shakeAnimation = CAKeyframeAnimation(keyPath: "transform.translation.x")
+            shakeAnimation.timingFunction = CAMediaTimingFunction(name: .linear)
+            shakeAnimation.duration = 0.6
+            shakeAnimation.values = [-10, 10, -8, 8, -6, 6, -4, 4, -2, 2, 0]
+            for _ in 0..<5{
+                M_feedback()
+            }
+            sender.layer.add(shakeAnimation, forKey: "shake")
+        }
+    }
+    @objc func OpenMyProfile(sender: UIButton){
+        if loggedIn{
+            M_feedback()
+            UIView.animate(withDuration: 0.2, animations: {
+                sender.transform = CGAffineTransform(scaleX: 0.95, y: 0.8)
+            }) { _ in
+                UIView.animate(withDuration: 0.2) {
+                    sender.transform = CGAffineTransform.identity
+                }
+            }
+            DispatchQueue.main.asyncAfter(deadline: DispatchTime.now() + 0.37) {
+                if self.isSidebarVisible{
+                    self.toggleSidebar()
+                }
+            }
+            
+            let vc = ProfileView()
+            let nav = UINavigationController(rootViewController: vc)
+            nav.setNavigationBarHidden(false, animated: false)
+            nav.modalPresentationStyle = .fullScreen
+            for i in 0..<UserArray.count{
+                if UserArray[i].Email! == currentEmail{
+                    
+                    if UserArray[i].Name != nil && UserArray[i].Name! != ""{
+                        vc.info_Name = UserArray[i].Name!
+                    }
+                    else{
+                        vc.info_Name = "(No Name)"
+                    }
+                    
+                    if UserArray[i].Phone != nil && UserArray[i].Phone! != ""{
+                        vc.info_Phone = UserArray[i].Phone!
+                    }
+                    else{
+                        vc.info_Phone = "xxx-xxx-xxxx"
+                    }
+                    
+                    if currentUser == currentEmail{
+                        vc.info_Username = "(\(currentUser))"
+                    }
+                    break
+                }
+                
+            }
+            vc.completion = {
+                self.table.reloadData()
+            }
+            self.present(nav, animated: true)
+        }
+        else{
+            M_feedback()
+            sender.pressIn()
+            let title = NSAttributedString(string: "Log In First", attributes: [
+                NSAttributedString.Key.font :  UIFont(name: "\(main_font_string)", size: 18)!,
+                NSAttributedString.Key.foregroundColor : UIColor.black
+            ])
+
+            let message = NSAttributedString(string: "Log in or sign up to view your profile", attributes: [
+                NSAttributedString.Key.font : UIFont(name: "\(main_font_string)", size: 14)!,
+                NSAttributedString.Key.foregroundColor : UIColor.black
+            ])
+
+            let alert = UIAlertController(title: "", message: "", preferredStyle: .alert)
+
+            alert.setValue(title, forKey: "attributedTitle")
+            alert.setValue(message, forKey: "attributedMessage")
+            alert.view.tintColor = alert_tint_color
+            
+            let exitPage = UIAlertAction(title: "Log In", style: .default){_ in
+                self.loginHandler(sender: self.menuButtons[3])
+            }
+            let CancelExit = UIAlertAction(title: "Cancel", style: .cancel)
+            
+            alert.addAction(CancelExit)
+            alert.addAction(exitPage)
+            
+            self.present(alert, animated: true)
+            
+            
+        }
+    }
+    
+    @objc func UsersTable(sender: UIButton){
+        M_feedback()
+        let vc = UsersView()
+        let nav = UINavigationController(rootViewController: vc)
+        nav.setNavigationBarHidden(false, animated: false)
+        nav.modalPresentationStyle = .fullScreen
+        self.present(nav, animated: true)
+    }
+    
+    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+        guard let location = locations.last else { return }
+        // Update UI with latitude and longitude
+        latitude = "\(location.coordinate.latitude)"
+        longitude = "\(location.coordinate.longitude)"
+       
+    }
+
+    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        print("Failed to find user's location: \(error.localizedDescription)")
+    }
+    
+    
+    
+    let sidebarWidth: CGFloat = UIScreen.main.bounds.width / 3
+      var sidebarView: UIView!
+      var menuView: UIView!
+ 
+      var isSidebarVisible = false
+
+
+   func setupSidebar() {
+      // Setup the sidebar container view
+      sidebarView = UIView(frame: CGRect(x: -sidebarWidth - 10, y: 0, width: sidebarWidth, height: view.frame.height))
+      sidebarView.backgroundColor = UIColor.white.withAlphaComponent(0.95)
+       sidebarView.layer.shadowColor = UIColor.gray.cgColor
+       sidebarView.layer.shadowOffset = main_shadow_offset
+       sidebarView.layer.shadowRadius = 5
+       sidebarView.layer.shadowOpacity = 1
+      view.addSubview(sidebarView)
+      
+      // Setup the menu view that holds the buttons
+      menuView = UIView(frame: sidebarView.bounds)
+       menuView.layer.shadowColor = UIColor.gray.cgColor
+       menuView.layer.shadowOffset = main_shadow_offset
+       menuView.layer.shadowRadius = 5
+       menuView.layer.shadowOpacity = 1
+      sidebarView.addSubview(menuView)
+    
+       menuView.addSubview(nameDisp)
+
+       //setup imagebutton
+       let profileImage = UIButton()
+       profileImage.frame = CGRect(x: nameDisp.center.x - 35, y: nameDisp.frame.maxY + 5, width: 70, height: 70)
+       profileImage.backgroundColor = .white
+       profileImage.layer.cornerRadius = 35
+       profileImage.layer.shadowOffset = CGSize(width: 5, height: 5)
+       profileImage.layer.shadowRadius = 3
+       profileImage.layer.shadowColor = UIColor.lightGray.withAlphaComponent(0.95).cgColor
+       profileImage.layer.shadowOpacity = 0.75
+       profileImage.layer.masksToBounds = false
+       profileImage.contentHorizontalAlignment = .fill
+       profileImage.contentVerticalAlignment = .fill
+       profileImage.imageView?.contentMode = .scaleAspectFill
+       profileImage.tintColor = .black
+       profileImage.titleLabel?.font = UIFont(name: "\(main_font_string)", size: 30)
+       profileImage.setTitleColor(.black, for: .normal)
+       profileImage.titleLabel?.textAlignment = .center
+       profileImage.addTarget(self, action: #selector(OpenMyProfile(sender:)), for: .touchUpInside)
+       menuView.addSubview(profileImage)
+       
+       
+      // Create buttons
+        let buttonTitles = ["Home", "Find Users", "Settings", "Log In", "Fold"]
+        let buttonHeight: CGFloat = 36
+        let buttonSpacing: CGFloat = 10
+        var topOffset: CGFloat = profileImage.frame.maxY + 10
+       for title in buttonTitles {
+            let button = UIButton(type: .system)
+            button.setTitle(title, for: .normal)
+            button.layer.cornerRadius = 6
+            button.layer.borderColor = UIColor.darkGray.cgColor
+            button.titleLabel?.font = UIFont(name: "\(main_font_string)", size: 15)
+            button.backgroundColor = UIColor.white.withAlphaComponent(0.98)
+            button.clipsToBounds = true
+            button.layer.shadowOffset = CGSize(width: 0, height: 1)
+            button.layer.shadowRadius = 0
+            button.layer.shadowColor = UIColor.lightGray.withAlphaComponent(1).cgColor
+            button.layer.shadowOpacity = 1
+            button.setTitleColor(.black, for: .normal)
+            button.titleLabel?.adjustsFontSizeToFitWidth = true
+          if title == "Fold"{
+              button.setTitleColor(.white, for: .normal)
+              button.backgroundColor = .black
+              button.frame = CGRect(x: 15, y: menuView.frame.maxY - buttonHeight - 30, width: sidebarWidth - 30, height: buttonHeight)
+              button.addTarget(self, action: #selector(toggleSidebar), for: .touchUpInside)
+              button.isHidden = true
+          }
+           else{
+               if title == "Home"{
+                   button.titleLabel?.font = UIFont(name: "\(main_font_string)", size: 15)
+                   button.backgroundColor = .black
+                   button.setTitleColor(.systemYellow, for: .normal)
+                   button.addTarget(self, action: #selector(goToPage(sender: )), for: .touchUpInside)
+               }
+               else if title == "Find Users"{
+                   button.addTarget(self, action: #selector(UsersTable(sender: )), for: .touchUpInside)
+               }
+               else if title == "Log In"{
+                   button.addTarget(self, action: #selector(loginHandler(sender: )), for: .touchUpInside)
+               }
+               else{
+                   button.addTarget(self, action: #selector(openSettings(sender: )), for: .touchUpInside)
+               }
+              
+               button.frame = CGRect(x: 15, y: topOffset, width: sidebarWidth - 30, height: buttonHeight)
+               topOffset += buttonHeight + buttonSpacing
+           }
+           
+          
+         
+          menuView.addSubview(button)
+          menuButtons.append(button)
+      }
+       menuButtons.append(profileImage)
+    }
+    
+
+        @objc func toggleSidebar() {
+          M_feedback()
+          if isSidebarVisible {
+              hideSidebar()
+          } else {
+              if searchOpened{
+                  searching(sender: activaterBt)
+              }
+              showSidebar()
+          }
+          isSidebarVisible.toggle()
+        }
+
+        func showSidebar() {
+          UIView.animate(withDuration: 0.3) {
+              self.sidebarView.frame.origin.x = 0
+          }
+        }
+
+        func hideSidebar() {
+          UIView.animate(withDuration: 0.3) {
+              self.sidebarView.frame.origin.x = -self.sidebarWidth - 10
+          }
+        }
+    
+    
+
+    func scrollViewWillEndDragging(_ scrollView: UIScrollView, withVelocity velocity: CGPoint, targetContentOffset: UnsafeMutablePointer<CGPoint>) {
+        
+            M_feedback()
+            let cellHeight = table.frame.height
+            let index = round(targetContentOffset.pointee.y / cellHeight)
+            targetContentOffset.pointee = CGPoint(x: 0, y: index * cellHeight)
+        print("done with dragging")
+    }
+    
+    func setupCollectionView() {
+        let layout = UICollectionViewFlowLayout()
+        layout.scrollDirection = .horizontal
+        layout.minimumLineSpacing = 0
+        
+        collectionView = UICollectionView(frame: .zero, collectionViewLayout: layout)
+        collectionView.backgroundColor = carousel_bgColor
+        collectionView.isPagingEnabled = true
+        collectionView.showsHorizontalScrollIndicator = false
+        collectionView.translatesAutoresizingMaskIntoConstraints = false
+        collectionView.delegate = self
+        collectionView.dataSource = self
+        collectionView.decelerationRate = .normal  // You can change this to .normal or custom for slower deceleration
+        collectionView.clipsToBounds = true
+        collectionView.layer.cornerRadius = 15
+        collectionView.isUserInteractionEnabled = true
+        collectionView.isSpringLoaded = true
+        collectionView.dragInteractionEnabled = false
+        collectionView.isScrollEnabled = false
+        collectionView.isPagingEnabled = true
+        let long_press = UILongPressGestureRecognizer(target: self, action: #selector(handle_long_press(sender :)))
+        collectionView.addGestureRecognizer(long_press)
+        view.addSubview(collectionView)
+
+        NSLayoutConstraint.activate([
+            collectionView.topAnchor.constraint(equalTo: table.bottomAnchor, constant: 3),
+            collectionView.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: margin),
+            collectionView.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -margin),
+            collectionView.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -84)
+        ])
+        
+        collectionView.register(CarouselCell.self, forCellWithReuseIdentifier: "CarouselCell")
+        affirmation_view.frame = CGRect(x: 15, y: view.center.y / 2 - 100, width: view.frame.width - 30, height: view.frame.width - 30)
+        view.addSubview(affirmation_view)
+        affirmation_view.addSubview(affirmation_dismiss_bt)
+        affirmation_dismiss_bt.frame = CGRect(x: 10, y: 10, width: 30, height: 30)
+        affirmation_view.isHidden = true
+        let affirmation_items = [affirmation_title_input, affirmation_des_input, affirmation_done_bt]
+        let affir_h : CGFloat = 40
+        let margin : CGFloat = 15
+        for i in 0..<affirmation_items.count {
+            affirmation_view.addSubview(affirmation_items[i])
+            if i == 0 {
+                affirmation_items[i].frame = CGRect(x: 10, y: 30 + CGFloat(i) * affir_h * 1.2 + margin, width: affirmation_view.frame.width - 20, height: affir_h)
+            }
+            
+            if i == 1 {
+                affirmation_items[i].frame = CGRect(x: 10, y: 30 + CGFloat(i) * affir_h * 1.2 + margin, width: affirmation_view.frame.width - 20, height: affir_h * 4)
+            }
+            
+            if i == 2 {
+                affirmation_items[i].frame = CGRect(x: 10, y: affirmation_view.frame.height - 52, width: affirmation_view.frame.width - 20, height: affir_h)
+            }
+        }
+    }
+    
+    func startAutoScroll() {
+        timer = Timer.scheduledTimer(timeInterval: 15.0, target: self, selector: #selector(scrollToNext), userInfo: nil, repeats: true)
+        startProgressTimer()
+    }
+    
+    @objc func handle_long_press(sender : UICollectionView) {
+        print("long pressed")
+        M_feedback()
+        collectionView.damping()
+        UIView.animate(withDuration: 0.2) { [weak self] in
+            self?.affirmation_view.isHidden = false
+            self?.affirmation_view.center.y += 5
+        }
+        DispatchQueue.main.asyncAfter(deadline: DispatchTime.now() + 0.2) {
+            [weak self] in
+            UIView.animate(withDuration: 1) { [weak self] in
+                self?.affirmation_view.center.y -= 5
+            }
+        }
+        
+    }
+    @objc func scrollToNext() {
+        let nextIndex = (currentIndex + 1) % images.count
+        let indexPath = IndexPath(item: nextIndex, section: 0)
+        UIView.animate(withDuration: 3) {
+            self.collectionView.scrollToItem(at: indexPath, at: .centeredHorizontally, animated: true)
+        }
+
+        currentIndex = nextIndex
+    }
+    
+    // MARK: - UICollectionViewDelegate, UICollectionViewDataSource
+    
+    func collectionView(_ collectionView: UICollectionView, numberOfItemsInSection section: Int) -> Int {
+        return images.count
+    }
+    
+    func collectionView(_ collectionView: UICollectionView, cellForItemAt indexPath: IndexPath) -> UICollectionViewCell {
+        let cell = collectionView.dequeueReusableCell(withReuseIdentifier: "CarouselCell", for: indexPath) as! CarouselCell
+        cell.configure(imageName: "images[indexPath.item]", title: titles[indexPath.item], description: descriptions[indexPath.item], progress: progress)
+        return cell
+    }
+    
+    func collectionView(_ collectionView: UICollectionView, layout collectionViewLayout: UICollectionViewLayout, sizeForItemAt indexPath: IndexPath) -> CGSize {
+        return CGSize(width: collectionView.frame.width, height: collectionView.frame.height)
+    }
+    
+    func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) {
+        let visibleRect = CGRect(origin: collectionView.contentOffset, size: collectionView.bounds.size)
+        let visiblePoint = CGPoint(x: visibleRect.midX, y: visibleRect.midY)
+        if let visibleIndexPath = collectionView.indexPathForItem(at: visiblePoint) {
+            currentIndex = visibleIndexPath.item
+        }
+    }
+    
+    override func viewWillDisappear(_ animated: Bool) {
+        super.viewWillDisappear(animated)
+        //timer?.invalidate()
+    }
+    override func viewWillAppear(_ animated: Bool) {
+        
+    }
+    let carouselHeight: CGFloat = 200.0
+    let margin: CGFloat = 10.0
+    var currentIndex = 0
+    var timer: Timer?
+    var progressTimer: Timer?
+    let scrollInterval: TimeInterval = 15.0 // Duration for each scroll
+
+    var images = ["image1", "image2", "image3", "image4", "image5"]
+    var titles = [
+        "Albert Einstein",
+        "Oprah Winfrey",
+        "Steve Jobs",
+        "Marilyn Monroe",
+        "Muhammad Ali"
+    ]
+
+    var descriptions = [
+        "Life is like riding a bicycle. To keep your balance, you must keep moving.",
+        "The biggest adventure you can take is to live the life of your dreams.",
+        "Your work is going to fill a large part of your life, and the only way to be truly satisfied is to do what you believe is great work.",
+        "Imperfection is beauty, madness is genius, and it’s better to be absolutely ridiculous than absolutely boring.",
+        "I hated every minute of training, but I said, 'Don’t quit. Suffer now and live the rest of your life as a champion.'"
+    ]
+
+
+    var collectionView: UICollectionView!
+    var progress: CGFloat = 0.0
+
+    func resetProgressTimer() {
+            progressTimer?.invalidate()
+            startProgressTimer()
+        }
+    func startProgressTimer() {
+           timer?.invalidate() // Cancel any existing timer
+           progress = 0.0
+           
+           // Create a new timer that fires every 0.02 seconds for a smooth update
+           timer = Timer.scheduledTimer(timeInterval: 0.02, target: self, selector: #selector(updateProgress), userInfo: nil, repeats: true)
+       }
+    var elapsedTime: TimeInterval = 0.0    // Time elapsed since the last transition
+
+    @objc func updateProgress() {
+        guard let visibleCell = collectionView.visibleCells.first as? CarouselCell else { return }
+        
+        // Increment elapsed time
+        elapsedTime += 0.02 // Update every 0.02 seconds
+        
+        // Calculate progress based on elapsed time and scroll interval
+        let progress = CGFloat(elapsedTime / scrollInterval)
+        
+        // Get the current index data from arrays
+        let imageName = "images[currentIndex]"
+        let title = titles[currentIndex]
+        let description = descriptions[currentIndex]
+        
+        // Update the visible cell with dynamic data
+        visibleCell.configure(imageName: imageName, title: title, description: description, progress: min(progress, 1.0))
+        
+        // When progress reaches 1.0, reset elapsedTime and move to next slide
+        if progress >= 1.0 {
+            elapsedTime = 0.0
+            moveToNextSlide()
+        }
+    }
+    func moveToNextSlide() {
+        // Increment the current index and ensure it wraps around the array
+        currentIndex = (currentIndex + 1) % titles.count
+        
+        // Scroll to the next item in the collection view
+        let nextIndexPath = IndexPath(item: currentIndex, section: 0)
+        collectionView.scrollToItem(at: nextIndexPath, at: .centeredHorizontally, animated: true)
+    }
+    let affirmation_view : UIView = {
+       let iv = UIView()
+        iv.clipsToBounds = true
+        iv.layer.cornerRadius = 15
+        iv.backgroundColor = .lightGray
+        iv.alpha = 1
+        return iv
+    }()
+    
+    lazy var affirmation_title_input : UITextField = {
+       let iv = UITextField()
+        iv.placeholder = "Please Enter Title"
+        iv.textAlignment = .center
+        iv.clipsToBounds = true
+        iv.layer.cornerRadius = 5
+        iv.textColor = .black
+        iv.backgroundColor = .white
+        iv.addDoneButton(title: "Done", target: self, selector: #selector(handle_key_board_dismiss_1(sender: )))
+        return iv
+    }()
+    lazy var affirmation_des_input : UITextView = {
+       let iv = UITextView()
+        iv.clipsToBounds = true
+        iv.textAlignment = .center
+        iv.layer.cornerRadius = 5
+        iv.textColor = .black
+        iv.backgroundColor = .white
+        iv.font = UIFont(name: main_font_string, size: 14)
+        iv.addDoneButton(title: "Done", target: self, selector: #selector(handle_key_board_dismiss_1(sender: )))
+        return iv
+    }()
+    lazy var affirmation_done_bt : UIButton = {
+       let iv = UIButton()
+        iv.setTitle("Submit", for: .normal)
+        iv.clipsToBounds = true
+        iv.layer.cornerRadius = 5
+        iv.setTitleColor(.white, for: .normal)
+        iv.backgroundColor = .black
+        iv.addTarget(self, action: #selector(handle_affirmation_submit(sender :)), for: .touchUpInside)
+        return iv
+    }()
+    @objc func handle_affirmation_submit(sender : UIButton) {
+        sender.damping()
+        M_feedback()
+        guard let title_val = affirmation_title_input.text else {return}
+        guard let des_val = affirmation_des_input.text else {return}
+        if title_val == "" {
+            affirmation_title_input.text = "Add Something?"
+            DispatchQueue.main.asyncAfter(deadline: DispatchTime.now() + 1) {
+                [weak self] in
+                self?.affirmation_title_input.text = ""
+            }
+            return
+//            titles.append("No Title")
+        }else{
+            titles.append(title_val)
+        }
+        
+        
+        
+        if des_val == "" {
+            affirmation_des_input.text = "Add Something?"
+            DispatchQueue.main.asyncAfter(deadline: DispatchTime.now() + 1) {
+                [weak self] in
+                self?.affirmation_des_input.text = ""
+            }
+            return
+//            descriptions.append("No Description")
+        }else{
+            descriptions.append((des_val))
+            images.append("new_image")
+        }
+        
+
+        
+        // reset
+        affirmation_des_input.text = ""
+        affirmation_des_input.text = ""
+        
+        titles.reverse()
+        descriptions.reverse()
+        DispatchQueue.main.asyncAfter(deadline: DispatchTime.now() + 0.5) {
+            [weak self] in
+            self?.collectionView.reloadData()
+        }
+        print(titles)
+        print(descriptions)
+        affirmation_view.isHidden = true
+        UIView.animate(withDuration: 1) { [weak self] in
+            self?.affirmation_view.center.y -= 10
+        }
+        DispatchQueue.main.asyncAfter(deadline: DispatchTime.now() + 1) {
+            [weak self] in
+            UIView.animate(withDuration: 1) { [weak self] in
+                self?.affirmation_view.center.y += 10
+            }
+            
+        }
+    }
+    lazy var affirmation_dismiss_bt : UIButton = {
+       let iv = UIButton()
+        iv.setTitle("x", for: .normal)
+        iv.clipsToBounds = true
+        iv.layer.cornerRadius = 5
+        iv.setTitleColor(.white, for: .normal)
+        iv.backgroundColor = .black
+        iv.addTarget(self, action: #selector(handle_affirmation_dismiss(sender :)), for: .touchUpInside)
+        return iv
+    }()
+    
+    @objc func handle_affirmation_dismiss(sender : UIButton) {
+        affirmation_view.isHidden = true
+        UIView.animate(withDuration: 1) { [weak self] in
+            self?.affirmation_view.center.y -= 10
+        }
+        DispatchQueue.main.asyncAfter(deadline: DispatchTime.now() + 1) {
+            [weak self] in
+            UIView.animate(withDuration: 1) { [weak self] in
+                self?.affirmation_view.center.y += 10
+            }
+        }
+    }
+}
+
+
+extension HomeView: UICollectionViewDelegate, UICollectionViewDataSource, UICollectionViewDelegateFlowLayout {
+    
+}
+
+
+
+
+
+class CustomizedDataCell : UITableViewCell {
+    var emojiView: RandomEmojiView?
+
+    let baseView : UIView = {
+        let iv = UIView()
+        iv.translatesAutoresizingMaskIntoConstraints = false
+        iv.backgroundColor = .white
+        iv.clipsToBounds = false
+        return iv
+    }()
+    let seperate_line : UIView = {
+        let iv = UIView()
+        iv.translatesAutoresizingMaskIntoConstraints = false
+        iv.backgroundColor = .black
+        iv.isHidden = true
+        iv.clipsToBounds = false
+        return iv
+    }()
+    
+    let seperate_line_bottom : UIView = {
+        let iv = UIView()
+        iv.translatesAutoresizingMaskIntoConstraints = false
+        iv.backgroundColor = .darkGray
+        iv.isHidden = false
+        iv.clipsToBounds = false
+        return iv
+    }()
+    
+    let seperate_line_move : UIView = {
+        let iv = UIView()
+        iv.backgroundColor = .black
+        iv.clipsToBounds = false
+        return iv
+    }()
+    let titleLabel : UILabel = {
+        let tt = UILabel()
+        tt.translatesAutoresizingMaskIntoConstraints = false
+        tt.backgroundColor = .white
+        tt.font = UIFont(name: "\(main_font_string)", size: 0)
+        tt.textColor = .black
+        tt.textAlignment = .center
+        tt.adjustsFontSizeToFitWidth = true
+        tt.clipsToBounds = true
+        return tt
+    }()
+    
+    let subjectLabel: TypingEffectLabel = {
+        let tt = TypingEffectLabel()
+        tt.translatesAutoresizingMaskIntoConstraints = false
+        tt.backgroundColor = .white
+        tt.textAlignment = .center
+        tt.font = UIFont(name: "\(main_font_string)", size: 14)
+        tt.textColor = .darkGray
+        tt.clipsToBounds = true
+        tt.numberOfLines = 0
+        return tt
+    }()
+    
+    let descLabel: UILabel = {
+       let tt = UILabel()
+       tt.translatesAutoresizingMaskIntoConstraints = false
+       tt.backgroundColor = .white
+       tt.font = UIFont(name: "\(main_font_string)", size: 18)
+       tt.textColor = .black
+       tt.clipsToBounds = true
+        tt.numberOfLines = 0
+        tt.isHidden = true
+       return tt
+   }()
+    let hostLabel: UILabel = {
+       let tt = UILabel()
+       tt.translatesAutoresizingMaskIntoConstraints = false
+       tt.backgroundColor = .white
+       tt.font = UIFont(name: "\(main_font_string)", size: 12)
+       tt.textColor = .black
+       tt.clipsToBounds = true
+       return tt
+    }()
+    let dateLabel: UILabel = {
+       let tt = UILabel()
+       tt.translatesAutoresizingMaskIntoConstraints = false
+       tt.backgroundColor = .white
+       tt.font = UIFont(name: "\(main_font_string)", size: 12)
+       tt.textColor = .black
+       tt.clipsToBounds = true
+       return tt
+    }()
+    let sDate: UILabel = {
+      let tt = UILabel()
+      tt.translatesAutoresizingMaskIntoConstraints = false
+      tt.backgroundColor = .clear
+      tt.font = UIFont(name: "\(main_font_string)", size: 12)
+      tt.textColor = .black
+        tt.textAlignment = .right
+      tt.clipsToBounds = true
+      return tt
+   }()
+    
+    let piv : UIImageView = {
+      let tt = UIImageView()
+      tt.translatesAutoresizingMaskIntoConstraints = false
+      tt.backgroundColor = .lightGray
+      tt.contentMode = .scaleAspectFill
+        tt.layer.cornerRadius = 3
+      tt.clipsToBounds = true
+      return tt
+   }()
+    let Theme_piv : UIImageView = {
+      let tt = UIImageView()
+      tt.translatesAutoresizingMaskIntoConstraints = false
+      tt.backgroundColor = .white
+      tt.contentMode = .scaleAspectFill
+        tt.layer.cornerRadius = 3
+      tt.clipsToBounds = true
+      return tt
+   }()
+    let theme_piv_bottom_line : UIView = {
+        let iv = UIView()
+        iv.translatesAutoresizingMaskIntoConstraints = false
+        iv.backgroundColor = .white
+        iv.isHidden = false
+        iv.clipsToBounds = false
+        return iv
+    }()
+    // MARK: -v updated 9.3
+    func configure(text_val : String) {
+            
+            // Remove existing emoji view if present
+            emojiView?.removeFromSuperview()
+            
+            // Match the title with the category
+            if let matchedEmojis = matchTitleWithCategory(text_val) {
+                emojiView = RandomEmojiView(frame: CGRect(x: 0, y: 0, width: UIScreen.main.bounds.width - 20, height: UIScreen.main.bounds.width))
+                emojiView?.setupEmojiLabels(index: matchedEmojis)
+                print(matchedEmojis)
+                Theme_piv.addSubview(emojiView!)
+            }
+        }
+    
+    func configure_index(index : Int) {
+        emojiView?.removeFromSuperview()
+
+        emojiView = RandomEmojiView(frame: CGRect(x: 0, y: 0, width: UIScreen.main.bounds.width - 20, height: UIScreen.main.bounds.width))
+        emojiView?.setupEmojiLabels(index: index)
+        print(index)
+        Theme_piv.addSubview(emojiView!)
+    }
+
+    private func matchTitleWithCategory(_ title: String) -> Int? {
+        switch title.lowercased() {
+        case "fashion":
+            return 0
+        case "food":
+            return 1
+        case "living":
+            return 2
+        case "travel":
+            return 3
+        case "business":
+            return 4
+        case "computer":
+            return 5
+        case "math":
+            return 6
+        case "education":
+            return 7
+        case "creativity":
+            return 8
+        case "volunteering":
+            return 9
+        case "sport":
+            return 10
+        case "music":
+            return 11
+        default:
+            return nil
+        }
+    }
+
+    
+    
+    override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
+        super.init(style: style, reuseIdentifier: "cell")
+        setupUI()
+    }
+    func setupUI(){
+        contentView.backgroundColor = .white
+        contentView.clipsToBounds = true
+        contentView.layer.cornerRadius = curveRadius
+        contentView.addSubview(baseView)
+        baseView.addSubview(titleLabel)
+        baseView.addSubview(subjectLabel)
+        baseView.addSubview(descLabel)
+        baseView.addSubview(hostLabel)
+        //contentView.addSubview(dateLabel)
+        baseView.addSubview(sDate)
+        baseView.addSubview(seperate_line)
+        baseView.addSubview(Theme_piv)
+        baseView.addSubview(theme_piv_bottom_line)
+        baseView.addSubview(seperate_line_bottom)
+        baseView.addSubview(piv)
+        
+        
+        let padding : CGFloat = 5
+        let top_padding : CGFloat = 10
+        let b_padding : CGFloat = 10
+        let constant_padding : CGFloat = 10
+        
+        baseView.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 0).isActive = true
+        baseView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: b_padding).isActive = true
+        baseView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -b_padding).isActive = true
+        baseView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -top_padding).isActive = true
+        
+        
+        
+        Theme_piv.topAnchor.constraint(equalTo: baseView.topAnchor, constant: padding * 0).isActive = true
+        Theme_piv.leadingAnchor.constraint(equalTo: baseView.leadingAnchor, constant:  0).isActive = true
+        Theme_piv.trailingAnchor.constraint(equalTo: baseView.trailingAnchor, constant:  0).isActive = true
+        // MARK: adapt to ipad
+        if UIScreen.main.bounds.width > 475 || UIScreen.main.bounds.height < 670 {
+            Theme_piv.heightAnchor.constraint(equalTo: baseView.heightAnchor, multiplier: 0.75).isActive = true
+        }else{
+            Theme_piv.heightAnchor.constraint(equalTo: Theme_piv.widthAnchor, multiplier: 1).isActive = true
+        }
+        if UIScreen.main.bounds.height < 670 {
+            seperate_line_bottom.isHidden = true
+        }
+        theme_piv_bottom_line.topAnchor.constraint(equalTo: Theme_piv.bottomAnchor, constant: -5).isActive = true
+        theme_piv_bottom_line.leadingAnchor.constraint(equalTo: baseView.leadingAnchor, constant:  0).isActive = true
+        theme_piv_bottom_line.trailingAnchor.constraint(equalTo: baseView.trailingAnchor, constant:  0).isActive = true
+        theme_piv_bottom_line.heightAnchor.constraint(equalToConstant: 5).isActive = true
+        
+        titleLabel.topAnchor.constraint(equalTo: Theme_piv.bottomAnchor, constant: padding * 1).isActive = true
+        titleLabel.leadingAnchor.constraint(equalTo: baseView.leadingAnchor, constant:  constant_padding + padding * 1).isActive = true
+        titleLabel.trailingAnchor.constraint(equalTo: baseView.trailingAnchor, constant:  -(constant_padding + padding * 1)).isActive = true
+        titleLabel.heightAnchor.constraint(equalToConstant: 30).isActive = true
+        titleLabel.layer.cornerRadius = 3
+        
+        piv.topAnchor.constraint(equalTo: baseView.topAnchor, constant: padding * 3).isActive = true
+        piv.trailingAnchor.constraint(equalTo: baseView.trailingAnchor, constant: -padding * 3).isActive = true
+        piv.heightAnchor.constraint(equalToConstant: 100).isActive = true
+        piv.widthAnchor.constraint(equalToConstant: 100).isActive = true
+
+        
+        seperate_line.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: padding).isActive = true
+        seperate_line.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 20 + padding * 2).isActive = true
+        seperate_line.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -20 - padding).isActive = true
+        seperate_line.heightAnchor.constraint(equalToConstant: 3).isActive = true
+        seperate_line.layer.cornerRadius = 0
+        
+        subjectLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: padding).isActive = true
+        subjectLabel.leadingAnchor.constraint(equalTo: baseView.leadingAnchor, constant: constant_padding + padding * 1).isActive = true
+        subjectLabel.trailingAnchor.constraint(equalTo: baseView.trailingAnchor, constant:  -1 * (constant_padding + padding * 1)).isActive = true
+        subjectLabel.layer.cornerRadius = 0
+        
+       
+        
+        descLabel.topAnchor.constraint(equalTo: subjectLabel.bottomAnchor, constant: padding * 2).isActive = true
+        descLabel.leadingAnchor.constraint(equalTo: baseView.leadingAnchor, constant: constant_padding + padding * 1).isActive = true
+        descLabel.trailingAnchor.constraint(equalTo: baseView.trailingAnchor, constant: -1 * (constant_padding + padding * 1)).isActive = true
+        descLabel.heightAnchor.constraint(equalToConstant: 80).isActive = true
+        descLabel.layer.cornerRadius = 0
+        
+        
+        
+        
+        
+        
+        
+        
+//        sDate.topAnchor.constraint(equalTo: dateLabel.bottomAnchor, constant: 0).isActive = true
+        
+        
+//        sDate.topAnchor.constraint(equalTo: subjectLabel.bottomAnchor, constant: 0).isActive = true
+//        sDate.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 20 + padding * 2).isActive = true
+//        sDate.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -20 - padding).isActive = true
+//        sDate.heightAnchor.constraint(equalToConstant: 24).isActive = true
+//        sDate.layer.cornerRadius = 0
+        
+        
+        seperate_line_bottom.bottomAnchor.constraint(equalTo: sDate.topAnchor, constant: -padding).isActive = true
+        seperate_line_bottom.leadingAnchor.constraint(equalTo: baseView.leadingAnchor, constant: 0).isActive = true
+        seperate_line_bottom.trailingAnchor.constraint(equalTo: baseView.trailingAnchor, constant: 0).isActive = true
+        seperate_line_bottom.heightAnchor.constraint(equalToConstant: 1).isActive = true
+        seperate_line_bottom.widthAnchor.constraint(equalTo: baseView.widthAnchor, multiplier: 1).isActive = true
+        
+        hostLabel.bottomAnchor.constraint(equalTo: baseView.bottomAnchor, constant:  -padding * 2).isActive = true
+        hostLabel.leadingAnchor.constraint(equalTo: baseView.leadingAnchor, constant: 10 + padding * 1).isActive = true
+        hostLabel.trailingAnchor.constraint(equalTo: sDate.leadingAnchor, constant: -5).isActive = true
+        hostLabel.heightAnchor.constraint(equalToConstant: 24).isActive = true
+        hostLabel.layer.cornerRadius = 0
+        
+        sDate.trailingAnchor.constraint(equalTo: baseView.trailingAnchor, constant: -10 - padding * 1).isActive = true
+        sDate.heightAnchor.constraint(equalToConstant: 24).isActive = true
+        sDate.bottomAnchor.constraint(equalTo: baseView.bottomAnchor, constant:  -padding * 2).isActive = true
+        sDate.layer.cornerRadius = 0
+        
+        
+        
+    }
+    
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+}
+ 
+extension UIView {
+    public func damping(){
+        let tempbg = self.backgroundColor
+        UIView.animate(withDuration: 0.2, animations: {
+            self.backgroundColor = .lightGray
+            self.transform = CGAffineTransform(scaleX: 0.95, y: 0.8)
+        }) { _ in
+            UIView.animate(withDuration: 0.2) {
+                self.backgroundColor = tempbg
+                self.transform = CGAffineTransform.identity
+            }
+        }
+    }
+    public func errVib(){
+        let shakeAnimation = CAKeyframeAnimation(keyPath: "transform.translation.x")
+        shakeAnimation.timingFunction = CAMediaTimingFunction(name: .linear)
+        shakeAnimation.duration = 0.6
+        shakeAnimation.values = [-10, 10, -8, 8, -6, 6, -4, 4, -2, 2, 0]
+        for _ in 0..<5{
+            Manage().M_feedback()
+        }
+        self.layer.add(shakeAnimation, forKey: "vib")
+    }
+}
